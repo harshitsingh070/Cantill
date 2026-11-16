@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: corvo-procurement
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:corvo;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.h2.Driver}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    enabled: true
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+
+server:
+  port: ${PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+corvo:
+  ai:
+    base-url: ${CORVO_AI_BASE_URL:http://localhost:8000}
+    token: ${CORVO_AI_TOKEN:local-dev-token}
+    timeout-ms: 4000
+    retries: 1
+  seed:
+    enabled: ${CORVO_SEED_ENABLED:true}
+  timezone: Asia/Kolkata
+
+logging:
+  level:
+    com.corvo.procurement: INFO
