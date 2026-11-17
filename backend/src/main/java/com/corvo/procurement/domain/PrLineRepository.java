@@ -6,4 +6,8 @@ import java.util.List;
 
 public interface PrLineRepository extends JpaRepository<PrLine, Long> {
     List<PrLine> findByBatchIdOrderByCreatedAtAscPrNoAscPrLineAsc(Long batchId);
+
+    List<PrLine> findByBatchIdOrderByPrLineAsc(Long batchId);
+
+    List<PrLine> findByIdIn(List<Long> ids);
 }

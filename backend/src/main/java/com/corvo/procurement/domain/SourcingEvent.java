@@ -10,6 +10,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "sourcing_events")
 @Getter
@@ -26,4 +28,12 @@ public class SourcingEvent {
     private String suggestedSupplierIds;
     @Column(name = "approval_status")
     private String approvalStatus;
+    @Column(name = "approved_by")
+    private String approvedBy;
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+    @Column(name = "sent_by")
+    private String sentBy;
+    @Column(name = "sent_at")
+    private LocalDateTime sentAt;
 }

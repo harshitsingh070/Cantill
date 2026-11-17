@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "decisions")
@@ -43,4 +44,22 @@ public class Decision {
     private String reason;
     @Column(name = "trace_json")
     private String traceJson;
+    @Column(name = "approval_status")
+    private String approvalStatus;
+    @Column(name = "approved_by")
+    private String approvedBy;
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+    @Column(name = "po_id")
+    private String poId;
+    @Column(name = "requires_capex_approval")
+    private Boolean requiresCapexApproval;
+    @Column(name = "original_decision_json")
+    private String originalDecisionJson;
+    @Column(name = "override_comment")
+    private String overrideComment;
+    @Column(name = "overridden_by")
+    private String overriddenBy;
+    @Column(name = "overridden_at")
+    private LocalDateTime overriddenAt;
 }

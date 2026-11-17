@@ -25,6 +25,8 @@ public class Requirement {
     private Long id;
     @Column(name = "run_id")
     private Long runId;
+    @Column(name = "engine_requirement_id")
+    private Long engineRequirementId;
     @Column(name = "requirement_date")
     private LocalDate requirementDate;
     @Column(name = "first_created_at")
@@ -37,6 +39,7 @@ public class Requirement {
     private String contractId;
     @Column(name = "unit_price")
     private BigDecimal unitPrice;
+    @Column(name = "requirement_value")
     private BigDecimal value;
     @Column(name = "valuation_source")
     private String valuationSource;

@@ -6,4 +6,8 @@ import java.util.List;
 
 public interface PoLineRepository extends JpaRepository<PoLine, Long> {
     List<PoLine> findByPoId(String poId);
+
+    List<PoLine> findByRequirementId(Long requirementId);
+
+    List<PoLine> findByRequirementIdIn(List<Long> requirementIds);
 }

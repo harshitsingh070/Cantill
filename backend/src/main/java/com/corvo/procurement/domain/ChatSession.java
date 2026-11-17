@@ -25,6 +25,8 @@ public class ChatSession {
     private String sessionKey;
     private String requester;
     private String department;
+    @Column(name = "state_json")
+    private String stateJson;
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 }

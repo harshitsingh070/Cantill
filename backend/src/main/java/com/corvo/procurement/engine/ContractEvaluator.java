@@ -54,7 +54,8 @@ public class ContractEvaluator {
         }
         candidates.sort(Comparator
                 .comparing((ContractCandidate c) -> c.line().rate())
-                .thenComparing(c -> c.contract().contractId()));
+                .thenComparing(c -> c.contract().startDate(), Comparator.reverseOrder())
+                .thenComparing(c -> c.contract().contractId(), Comparator.reverseOrder()));
         return candidates;
     }
 

@@ -136,7 +136,7 @@ CREATE TABLE requirements (
     urgency VARCHAR(32),
     contract_id VARCHAR(32),
     unit_price NUMERIC(18,4),
-    value NUMERIC(18,2),
+    requirement_value NUMERIC(18,2),
     valuation_source VARCHAR(128),
     is_new_item BOOLEAN NOT NULL DEFAULT FALSE
 );

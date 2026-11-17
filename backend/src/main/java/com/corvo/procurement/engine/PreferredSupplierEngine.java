@@ -198,16 +198,7 @@ public class PreferredSupplierEngine {
     }
 
     private List<String> supplierCategories(SupplierInfo supplier) {
-        if (supplier.categories() == null) {
-            return List.of();
-        }
-        List<String> result = new ArrayList<>();
-        for (String part : supplier.categories().split(";")) {
-            if (!part.isBlank()) {
-                result.add(part.trim());
-            }
-        }
-        return result;
+        return supplier.categories() == null ? List.of() : supplier.categories();
     }
 
     private BigDecimal safe(BigDecimal value) {

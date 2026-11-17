@@ -6,4 +6,6 @@ import java.util.List;
 
 public interface RequirementRepository extends JpaRepository<Requirement, Long> {
     List<Requirement> findByRunIdOrderByRequirementDateAscFirstCreatedAtAsc(Long runId);
+
+    List<Requirement> findByRunId(Long runId);
 }

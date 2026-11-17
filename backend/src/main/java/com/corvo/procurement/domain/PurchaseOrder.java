@@ -27,4 +27,10 @@ public class PurchaseOrder {
     private Long createdFromRequirement;
     @Column(name = "first_requirement_at")
     private LocalDateTime firstRequirementAt;
+    @Column(name = "approval_status")
+    private String approvalStatus;
+    @Column(name = "approved_by")
+    private String approvedBy;
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
 }
