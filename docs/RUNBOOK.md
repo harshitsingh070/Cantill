@@ -1,4 +1,4 @@
-# Blind-test runbook
+﻿# Blind-test runbook
 
 The stack is already seeded with policy `v5.0` active and the contract register (including
 the two PDF-only contracts). The folder `submission/` must end up with exactly three CSVs.
@@ -18,14 +18,14 @@ Open http://localhost:5173. Confirm the workspace is empty and the Policy consol
 
 1. Buyer workspace -> choose the new PR batch CSV -> **Process batch**.
 2. The run appears in run history. Note its run id.
-3. Export decisions CSV. Save as `submission/decisions_run1.csv`.
+3. Export decisions CSV. Save as `submission/decisions_v5.csv`.
 
 API equivalent:
 
 ```powershell
 curl.exe -X POST http://localhost:8080/api/process-batch `
   -F "file=@<new_batch>.csv" -F "uploadedBy=buyer"
-curl.exe -o submission/decisions_run1.csv `
+curl.exe -o submission/decisions_v5.csv `
   http://localhost:8080/api/runs/<runId>/export.csv
 ```
 
@@ -70,7 +70,7 @@ If two-step mode is requested, pass `{"two_step":true}` and call
 
 1. Buyer workspace -> upload the identical CSV again -> **Process batch**.
 2. A new run id is created because the active policy changed.
-3. Export decisions CSV. Save as `submission/decisions_run2.csv`.
+3. Export decisions CSV. Save as `submission/decisions_amended.csv`.
 
 API equivalent: repeat the upload command, then export the new run id.
 
