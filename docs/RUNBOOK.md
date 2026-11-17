@@ -1,4 +1,4 @@
-﻿# Blind-test runbook
+# Blind-test runbook
 
 The stack is already seeded with policy `v5.0` active and the contract register (including
 the two PDF-only contracts). The folder `submission/` must end up with exactly three CSVs.
