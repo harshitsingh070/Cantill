@@ -78,13 +78,16 @@ Vite proxies `/api` to `http://localhost:8080`.
 
 ## Hosted link
 
-Not provisioned from this environment because no Render/Railway credentials were available. The repository is
-deployment-ready: deploy the backend, AI service, and PostgreSQL, then deploy the frontend with `VITE`-less
-relative `/api` calls (nginx config included). Set the environment variables above and the hosted URL here:
+Temporary live demo backed by the local Docker Compose stack (Cloudflare quick tunnel; available while the stack
+and tunnel process are running):
 
 ```
-Hosted app: <to be added after deployment>
+Hosted app: https://suggestions-trademark-essentially-conviction.trycloudflare.com
 ```
+
+The repository is deployment-ready for a persistent host: deploy the backend, AI service, and PostgreSQL, then
+deploy the frontend with `VITE`-less relative `/api` calls (nginx config included). Set the environment variables
+above and replace the temporary URL with the persistent hosted URL.
 
 ## Seed data and determinism
 
