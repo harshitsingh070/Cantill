@@ -327,7 +327,10 @@ the original decision and approver identity to remain inspectable.
 ## Known limitations and interpretations
 
 - No authentication or role enforcement is implemented. The API trusts the `requester`/`department`/`actor` fields
-  and the UI labels actions by role. For a production deployment this would need SSO and server-side authorization.
+  and the UI labels actions by role. The approve and activate endpoints accept an actor parameter and record it in the
+  audit trail. A production deployment would add Spring Security with role-based access control.
+- Policy v5.0 intentionally seeds only global parameters. Scoped parameters are introduced through policy amendments,
+  exactly as the policy-as-data model requires; their absence from the seed is not a missing feature.
 - Hosted deployment is documented but not provisioned in this environment; no credentials were available. Docker
   Compose is the verified one-command path.
 - The Python service uses deterministic regex parsers, not an external LLM. It returns proposals, handles the

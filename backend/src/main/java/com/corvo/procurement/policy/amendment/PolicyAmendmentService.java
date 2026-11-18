@@ -117,9 +117,17 @@ public class PolicyAmendmentService {
     public PolicyAmendment create(String source, String rawText, String documentRef,
                                   LocalDate effectiveFrom, List<Map<String, Object>> operations,
                                   String createdBy) {
+        return create(source, rawText, documentRef, effectiveFrom, operations, createdBy, false);
+    }
+
+    @Transactional
+    public PolicyAmendment create(String source, String rawText, String documentRef,
+                                  LocalDate effectiveFrom, List<Map<String, Object>> operations,
+                                  String createdBy, boolean validateOnCreate) {
         if (effectiveFrom == null) {
             throw new PolicyValidationException("Effective date is required");
         }
+        List<Map<String, Object>> normalized = normalizeOperations(operations);
         PolicyAmendment amendment = new PolicyAmendment();
         amendment.setSource(source == null ? "manual" : source);
         amendment.setRawText(rawText);
@@ -127,14 +135,21 @@ public class PolicyAmendmentService {
         amendment.setEffectiveFrom(effectiveFrom);
         amendment.setCreatedBy(createdBy == null ? "buyer" : createdBy);
         amendment.setStatus("DRAFT");
-        amendment.setOperationsJson(write(operations == null ? List.of() : operations));
+        amendment.setOperationsJson(write(normalized));
         amendment.setExtractedJson(write(Map.of(
                 "effective_from", effectiveFrom.toString(),
                 "summary", "",
-                "operations", operations == null ? List.of() : operations,
+                "operations", normalized,
                 "warnings", List.of(),
                 "confidence", 0.0
         )));
+        if (validateOnCreate) {
+            PolicyDraft draft = materialize(amendment);
+            List<String> errors = validateDraft(draft);
+            if (!errors.isEmpty()) {
+                throw new PolicyValidationException(String.join("; ", errors));
+            }
+        }
         return amendmentRepository.save(amendment);
     }
 
@@ -156,9 +171,10 @@ public class PolicyAmendmentService {
             throw new PolicyValidationException("Only DRAFT or VALIDATED amendments are mutable");
         }
         List<Map<String, Object>> operations = readOperations(amendment.getOperationsJson());
-        operations.add(operation);
-        if ("set_effective_from".equals(operation.get("type"))) {
-            Object date = operation.get("date");
+        Map<String, Object> normalized = normalizeOperation(operation);
+        operations.add(normalized);
+        if ("set_effective_from".equals(normalized.get("type"))) {
+            Object date = normalized.get("date");
             if (date != null) {
                 amendment.setEffectiveFrom(LocalDate.parse(String.valueOf(date)));
             }
@@ -260,10 +276,6 @@ public class PolicyAmendmentService {
             savedParameters.add(row);
         }
         parameterRepository.saveAll(savedParameters);
-
-        if (!twoStep && "ACTIVE".equals(version.getStatus()) && parent != null) {
-            retireOlder(parent, version);
-        }
 
         amendment.setApprovedBy(actor == null ? "procurement" : actor);
         amendment.setApprovedAt(now);
@@ -815,13 +827,6 @@ public class PolicyAmendmentService {
                 .reduce((first, second) -> second);
     }
 
-    private void retireOlder(PolicyVersion parent, PolicyVersion current) {
-        if ("ACTIVE".equals(parent.getStatus())) {
-            parent.setStatus("RETIRED");
-            versionRepository.save(parent);
-        }
-    }
-
     private String nextLabel(PolicyAmendment amendment, PolicyVersion parent) {
         String base = (parent == null ? "v5.0" : parent.getLabel()) + "-A" + amendment.getId();
         if (versionRepository.findByLabel(base).isEmpty()) {
@@ -990,6 +995,92 @@ public class PolicyAmendmentService {
             return readMap(string);
         }
         return null;
+    }
+
+    private List<Map<String, Object>> normalizeOperations(List<Map<String, Object>> operations) {
+        List<Map<String, Object>> normalized = new ArrayList<>();
+        if (operations == null) {
+            return normalized;
+        }
+        for (Map<String, Object> operation : operations) {
+            normalized.add(normalizeOperation(operation));
+        }
+        return normalized;
+    }
+
+    private Map<String, Object> normalizeOperation(Map<String, Object> operation) {
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        if (operation == null) {
+            return normalized;
+        }
+        for (Map.Entry<String, Object> entry : operation.entrySet()) {
+            String key = snakeKey(entry.getKey());
+            Object value = entry.getValue();
+            if ("condition_json".equals(key) || "outcome_json".equals(key)) {
+                value = normalizeJsonValue(value);
+            } else if ("patch".equals(key)) {
+                value = normalizeJsonValue(value);
+            }
+            normalized.put(key, value);
+        }
+        return normalized;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object normalizeJsonValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> normalized = new LinkedHashMap<>();
+            map.forEach((key, nested) -> {
+                String snake = snakeKey(String.valueOf(key));
+                if ("condition_json".equals(snake) || "outcome_json".equals(snake) || "patch".equals(snake)) {
+                    normalized.put(snake, normalizeJsonValue(nested));
+                } else {
+                    normalized.put(snake, nested);
+                }
+            });
+            return normalized;
+        }
+        if (value instanceof String string) {
+            String trimmed = string.trim();
+            if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+                try {
+                    Object parsed = PolicyJson.MAPPER.convertValue(PolicyJson.parse(trimmed), Object.class);
+                    return PolicyJson.write(normalizeJsonValue(parsed));
+                } catch (Exception ignored) {
+                    return value;
+                }
+            }
+        }
+        if (value instanceof List<?> list) {
+            List<Object> normalized = new ArrayList<>();
+            for (Object element : list) {
+                normalized.add(normalizeJsonValue(element));
+            }
+            return normalized;
+        }
+        return value;
+    }
+
+    private String snakeKey(String key) {
+        if (key == null) {
+            return "";
+        }
+        return switch (key) {
+            case "ruleKey" -> "rule_key";
+            case "clauseRef" -> "clause_ref";
+            case "conditionJson" -> "condition_json";
+            case "outcomeJson" -> "outcome_json";
+            case "scopeJson", "scope" -> "scope_json";
+            case "valueType" -> "value_type";
+            case "supplierStrategy" -> "supplier_strategy";
+            case "suggestionCount" -> "suggestion_count";
+            case "supplierId" -> "supplier_id";
+            case "effectiveFrom" -> "effective_from";
+            case "documentRef" -> "document_ref";
+            case "createdBy" -> "created_by";
+            case "twoStep" -> "two_step";
+            default -> key;
+        };
     }
 
     private List<Map<String, Object>> readOperations(String json) {

@@ -16,7 +16,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 public class ContractService {
@@ -37,9 +36,7 @@ public class ContractService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> list() {
-        Map<String, BigDecimal> runConsumption = consumptionRunRepository.findAll().stream()
-                .collect(Collectors.groupingBy(ContractConsumptionRun::getContractId,
-                        Collectors.reducing(BigDecimal.ZERO, ContractConsumptionRun::getAmount, BigDecimal::add)));
+        Map<String, BigDecimal> runConsumption = latestRunConsumption();
         return contractRepository.findAll().stream()
                 .sorted((a, b) -> a.getContractId().compareTo(b.getContractId()))
                 .map(contract -> present(contract, runConsumption.getOrDefault(contract.getContractId(), BigDecimal.ZERO)))
@@ -50,11 +47,36 @@ public class ContractService {
     public Map<String, Object> get(String contractId) {
         Contract contract = contractRepository.findById(contractId)
                 .orElseThrow(() -> new IllegalArgumentException("Contract not found: " + contractId));
-        BigDecimal run = consumptionRunRepository.findAll().stream()
-                .filter(c -> contractId.equals(c.getContractId()))
-                .map(ContractConsumptionRun::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal run = latestRunConsumption().getOrDefault(contractId, BigDecimal.ZERO);
         return present(contract, run);
+    }
+
+    private Map<String, BigDecimal> latestRunConsumption() {
+        List<ContractConsumptionRun> rows = consumptionRunRepository.findAll();
+        Map<String, ContractConsumptionRun> latest = new LinkedHashMap<>();
+        for (ContractConsumptionRun row : rows) {
+            ContractConsumptionRun current = latest.get(row.getContractId());
+            if (current == null || runOrder(row) > runOrder(current)) {
+                latest.put(row.getContractId(), row);
+            }
+        }
+        Map<String, BigDecimal> totals = new LinkedHashMap<>();
+        for (ContractConsumptionRun row : rows) {
+            ContractConsumptionRun chosen = latest.get(row.getContractId());
+            if (chosen != null && java.util.Objects.equals(chosen.getRunId(), row.getRunId())) {
+                BigDecimal amount = row.getAmount() == null ? BigDecimal.ZERO : row.getAmount();
+                totals.merge(row.getContractId(), amount, BigDecimal::add);
+            }
+        }
+        return totals;
+    }
+
+    private long runOrder(ContractConsumptionRun row) {
+        try {
+            return Long.parseLong(String.valueOf(row.getRunId()));
+        } catch (NumberFormatException e) {
+            return row.getId() == null ? Long.MIN_VALUE : row.getId();
+        }
     }
 
     @Transactional
@@ -119,6 +141,9 @@ public class ContractService {
         body.put("end_date", contract.getEndDate());
         body.put("value_cap", contract.getValueCap());
         body.put("baseline_consumed", baseline);
+        body.put("consumed_value_baseline", baseline);
+        body.put("baseline_remaining", contract.getValueCap() == null
+                ? null : contract.getValueCap().subtract(baseline));
         body.put("run_consumption", runConsumption == null ? BigDecimal.ZERO : runConsumption);
         body.put("consumed", consumed);
         body.put("remaining", remaining);

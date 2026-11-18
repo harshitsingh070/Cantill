@@ -1397,3 +1397,20 @@ Day 3:
 - [ ] README, APPROACH.md, and DECISIONS.md are complete.
 - [ ] No hard-coded PR numbers or item answers.
 - [ ] Blind-test submission folder and runbook are ready.
+
+---
+
+## 22. As-built implementation notes
+
+These notes record deliberate implementation choices that differ from the original plan but preserve the required
+behaviour.
+
+- **Chat intake.** Chat uses a deterministic Java regex slot-filler rather than the Python/LLM architecture described
+  in the original plan. The Python AI service exists and is wired, but it is not used for chat. This keeps the
+  blind-test critical path independent of LLM availability. The functional requirements are met: slot filling, item
+  resolution, policy-change detection, and no auto-approve.
+- **AI resilience.** The AI client has configurable timeouts and retries. A full circuit breaker (for example
+  Resilience4j) was not implemented; the batch decision path is fully independent of the AI service and is unaffected
+  by AI unavailability.
+- **Runtime stack.** The backend runs Spring Boot 3.3 on Java 17, and the frontend uses React 18 with Vite. Both fit
+  the brief's "Spring Boot 3.x" and "React/Next.js (or similar)" allowances.

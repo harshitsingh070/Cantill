@@ -42,7 +42,7 @@ public class PreferredSupplierService {
             if (itemCode != null && !itemCode.isBlank() && !item.itemCode().equals(itemCode)) {
                 continue;
             }
-            result.put(item.itemCode(), engine.compute(item, asOfDate, policy, resolver));
+            result.put(item.itemCode(), engine.computeWithFallback(item, asOfDate, policy, resolver));
         }
         return result;
     }

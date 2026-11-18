@@ -2,8 +2,11 @@ package com.corvo.procurement.api;
 
 import com.corvo.procurement.ai.AiClient;
 import com.corvo.procurement.domain.PolicyFact;
+import com.corvo.procurement.domain.PolicyParameter;
 import com.corvo.procurement.domain.PolicyVersion;
+import com.corvo.procurement.policy.PolicyJson;
 import com.corvo.procurement.policy.PolicyService;
+import com.corvo.procurement.policy.ScopeJson;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -47,6 +50,17 @@ public class PolicyController {
         return body;
     }
 
+    @GetMapping("/policies/{versionId}/parameters")
+    public List<Map<String, Object>> parameters(@PathVariable Long versionId,
+                                                @RequestParam(value = "key", required = false) String key) {
+        policyService.version(versionId)
+                .orElseThrow(() -> new IllegalArgumentException("Policy version not found: " + versionId));
+        return policyService.parameters(versionId).stream()
+                .filter(parameter -> key == null || key.isBlank() || key.equals(parameter.getParamKey()))
+                .map(this::presentParameter)
+                .toList();
+    }
+
     @GetMapping("/policy-facts")
     public List<PolicyFact> facts() {
         return policyService.facts();
@@ -72,5 +86,29 @@ public class PolicyController {
         } catch (IOException e) {
             throw new IllegalArgumentException("Cannot read uploaded policy file", e);
         }
+    }
+
+    private Map<String, Object> presentParameter(PolicyParameter parameter) {
+        Map<String, String> scope = ScopeJson.parse(parameter.getScopeJson());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("id", parameter.getId());
+        body.put("key", parameter.getParamKey());
+        body.put("param_key", parameter.getParamKey());
+        body.put("value", PolicyJson.MAPPER.convertValue(PolicyJson.parse(parameter.getValueJson()), Object.class));
+        body.put("value_json", parameter.getValueJson());
+        body.put("value_type", parameter.getValueType());
+        body.put("scope", scope);
+        body.put("scope_json", parameter.getScopeJson() == null
+                ? null : PolicyJson.MAPPER.convertValue(PolicyJson.parse(parameter.getScopeJson()), Object.class));
+        if (scope.containsKey("category")) {
+            body.put("category", scope.get("category"));
+        }
+        if (scope.containsKey("item_code")) {
+            body.put("item_code", scope.get("item_code"));
+        }
+        if (scope.containsKey("plant")) {
+            body.put("plant", scope.get("plant"));
+        }
+        return body;
     }
 }

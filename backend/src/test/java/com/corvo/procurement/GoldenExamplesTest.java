@@ -2,6 +2,7 @@ package com.corvo.procurement;
 
 import com.corvo.procurement.engine.model.EngineResult;
 import com.corvo.procurement.engine.model.LineResult;
+import com.corvo.procurement.engine.model.PrLineInput;
 import com.corvo.procurement.engine.model.PreferredSupplier;
 import com.corvo.procurement.ingestion.BatchService;
 import com.corvo.procurement.ingestion.CsvExporter;
@@ -14,14 +15,18 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class GoldenExamplesTest {
+    private static final AtomicLong SEQUENCE = new AtomicLong(970_000);
+
     @Autowired
     private BatchService batchService;
 
@@ -81,6 +86,40 @@ class GoldenExamplesTest {
         assertLine("PR-26-00041", 1, "ITM-1039", "RFQ", null, null, "231497.60", null, null);
         assertLine("PR-26-00167", 2, "ITM-1073", "CAPEX_SOURCING", null, null, "1150000.00", null,
                 "S045;S047;S020;S048;S046");
+    }
+
+    @Test
+    void itm1003ContractPrecedenceOverPoHistory() {
+        assertLine("PR-26-00012", 1, "ITM-1003", "CONTRACT_PO", "S001", "83.69", "98754.20", null, null);
+    }
+
+    @Test
+    void itm1039PdfContractActiveOnStartDate() {
+        long id = SEQUENCE.incrementAndGet();
+        LocalDate requirementDate = LocalDate.parse("2026-11-15");
+        PrLineInput line = new PrLineInput(
+                id,
+                "PR-GOLD-" + id,
+                1,
+                requirementDate.atTime(9, 0),
+                "test-buyer",
+                "Maintenance",
+                "PUN1",
+                "ITM-1039",
+                "FRL unit 1/2 inch",
+                new BigDecimal("80"),
+                "NOS",
+                null,
+                requirementDate.plusDays(14),
+                "Normal"
+        );
+
+        EngineResult synthetic = batchService.processInputs(List.of(line), "golden-itm-1039", "test").result();
+        assertThat(synthetic.lines()).hasSize(1);
+        LineResult result = synthetic.lines().get(0);
+        assertThat(result.route()).isEqualTo("CONTRACT_PO");
+        assertThat(result.supplierId()).isEqualTo("S021");
+        assertThat(money(result.unitPrice())).isEqualTo("2746.87");
     }
 
     @Test

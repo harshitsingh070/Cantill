@@ -154,7 +154,7 @@ public class ChatService {
                 try {
                     PolicyAmendment amendment = amendmentService.create("chat", state.policyText, null,
                             state.policyEffective, state.policyOps,
-                            session.getRequester() == null ? "buyer" : session.getRequester());
+                            session.getRequester() == null ? "buyer" : session.getRequester(), true);
                     state.amendmentId = amendment.getId();
                     state.stage = "POLICY_DRAFTED";
                     state.awaitingConfirm = false;
@@ -223,8 +223,10 @@ public class ChatService {
 
         String scopeText = state.policyScope == null || state.policyScope.isEmpty()
                 ? "" : " for " + state.policyScope;
-        return "From " + state.policyEffective + ", " + state.policyParam + " will be "
-                + plainNumber(state.policyValue) + scopeText + ". "
+        String previous = currentPolicyValue(state.policyParam, today);
+        return "From " + state.policyEffective + ", " + state.policyParam + " changes from "
+                + (previous == null ? "its current value" : previous)
+                + " to " + plainNumber(state.policyValue) + scopeText + ". "
                 + "This is a draft only. Reply \"confirm\" to create the draft amendment; Procurement must approve and activate it.";
     }
 
@@ -762,12 +764,18 @@ public class ChatService {
 
     private BigDecimal detectPolicyValue(String lower) {
         Matcher matcher = Pattern.compile(
-                "(?i)(?:limit|boundary|window|consolidation|hours|days)\\s*(?:is|to|at|of|=|:)?\\s*(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(lakh|lac|crore|k)?")
+                "(?i)(?:limit|boundary|window|consolidation|hours|days)\\s*(?:is|to|at|of|=|:)?\\s*(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(lakhs?|lac|crore|cr|k)?")
                 .matcher(lower);
         if (matcher.find()) {
             return scaleValue(matcher.group(1), matcher.group(2));
         }
-        Matcher any = Pattern.compile("(?i)(?:₹|rs\\.?|inr)\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(lakh|lac|crore|k)?")
+        Matcher change = Pattern.compile(
+                "(?i)(?:should\\s+be|be|is|to|at|of|=|:)\\s*(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(lakhs?|lac|crore|cr|k)?")
+                .matcher(lower);
+        if (change.find()) {
+            return scaleValue(change.group(1), change.group(2));
+        }
+        Matcher any = Pattern.compile("(?i)(?:₹|rs\\.?|inr)\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(lakhs?|lac|crore|cr|k)?")
                 .matcher(lower);
         if (any.find()) {
             return scaleValue(any.group(1), any.group(2));
@@ -784,8 +792,8 @@ public class ChatService {
             return value;
         }
         return switch (unit.toLowerCase(Locale.ROOT)) {
-            case "lakh", "lac" -> value.multiply(new BigDecimal("100000"));
-            case "crore" -> value.multiply(new BigDecimal("10000000"));
+            case "lakh", "lakhs", "lac" -> value.multiply(new BigDecimal("100000"));
+            case "crore", "cr" -> value.multiply(new BigDecimal("10000000"));
             case "k" -> value.multiply(new BigDecimal("1000"));
             default -> value;
         };
@@ -966,6 +974,21 @@ public class ChatService {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private String currentPolicyValue(String key, LocalDate today) {
+        if (key == null) {
+            return null;
+        }
+        return policyService.selectSnapshot(today)
+                .flatMap(snapshot -> snapshot.parameters().stream()
+                        .filter(parameter -> key.equals(parameter.key()))
+                        .filter(parameter -> parameter.scopeJson() == null || parameter.scopeJson().isBlank())
+                        .findFirst())
+                .map(parameter -> parameter.value() instanceof BigDecimal decimal
+                        ? decimal.setScale(0, RoundingMode.HALF_UP).toPlainString()
+                        : String.valueOf(parameter.value()))
+                .orElse(null);
     }
 
     private String plainNumber(BigDecimal value) {

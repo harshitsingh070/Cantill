@@ -80,6 +80,15 @@ public class AuditService {
                 .orElseThrow(() -> new IllegalArgumentException("Decision not found: " + decisionId));
         String comment = string(body.get("comment"));
         if (comment == null || comment.isBlank()) {
+            comment = string(body.get("reason"));
+        }
+        if (comment == null || comment.isBlank()) {
+            comment = string(body.get("override_reason"));
+        }
+        if (comment == null || comment.isBlank()) {
+            comment = string(body.get("overrideReason"));
+        }
+        if (comment == null || comment.isBlank()) {
             throw new IllegalArgumentException("A written comment is required for an override");
         }
         String actor = body.get("actor") == null ? "buyer" : string(body.get("actor"));

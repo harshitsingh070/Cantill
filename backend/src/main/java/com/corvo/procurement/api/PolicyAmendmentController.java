@@ -3,6 +3,7 @@ package com.corvo.procurement.api;
 import com.corvo.procurement.domain.PolicyAmendment;
 import com.corvo.procurement.domain.PolicyVersion;
 import com.corvo.procurement.policy.amendment.PolicyAmendmentService;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
@@ -32,6 +34,7 @@ public class PolicyAmendmentController {
     }
 
     @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
     @SuppressWarnings("unchecked")
     public Map<String, Object> create(@RequestBody Map<String, Object> body) {
         LocalDate effectiveFrom = parseDate(firstNonNull(body.get("effective_from"), body.get("effectiveFrom")));
@@ -43,7 +46,8 @@ public class PolicyAmendmentController {
                 string(firstNonNull(body.get("document_ref"), body.get("documentRef"))),
                 effectiveFrom,
                 operations,
-                string(firstNonNull(body.get("created_by"), body.get("createdBy")))
+                string(firstNonNull(body.get("created_by"), body.get("createdBy"))),
+                true
         );
         return present(amendment);
     }

@@ -32,7 +32,7 @@ public class PreferredSupplierController {
         return service.list(asOfDate, itemCode);
     }
 
-    @GetMapping("/export.csv")
+    @GetMapping({"/export", "/export.csv"})
     public ResponseEntity<String> export(
             @RequestParam("as_of_date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOfDate,
             @RequestParam(value = "item_code", required = false) String itemCode) {

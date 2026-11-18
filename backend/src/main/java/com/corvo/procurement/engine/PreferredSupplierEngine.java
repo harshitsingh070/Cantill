@@ -140,6 +140,53 @@ public class PreferredSupplierEngine {
         return result;
     }
 
+    public List<PreferredSupplier> computeWithFallback(ItemInfo item, LocalDate asOfDate, PolicySnapshot policy,
+                                                       ParameterResolver resolver) {
+        List<PreferredSupplier> preferred = compute(item, asOfDate, policy, resolver);
+        if (!preferred.isEmpty() || item == null || policy == null) {
+            return preferred;
+        }
+        RequirementFacts facts = catalogueFacts(item);
+        BigDecimal onTimeWeight = resolver.resolveDecimal("topup_weight_on_time", facts);
+        BigDecimal qualityWeight = resolver.resolveDecimal("topup_weight_quality", facts);
+        List<SupplierInfo> topup = new ArrayList<>();
+        for (SupplierInfo supplier : data.suppliers().values()) {
+            if (!supplier.isActive()) {
+                continue;
+            }
+            if (supplierCategories(supplier).stream().noneMatch(c -> c.equalsIgnoreCase(item.category()))) {
+                continue;
+            }
+            topup.add(supplier);
+        }
+        topup.sort(Comparator
+                .comparing((SupplierInfo s) -> topupScore(s, onTimeWeight, qualityWeight)).reversed()
+                .thenComparing(SupplierInfo::supplierId));
+        List<PreferredSupplier> result = new ArrayList<>();
+        int rank = 1;
+        for (SupplierInfo supplier : topup) {
+            BigDecimal score = topupScore(supplier, onTimeWeight, qualityWeight);
+            Map<String, Object> components = new LinkedHashMap<>();
+            components.put("fallback", true);
+            components.put("reason", "no active PO history or contract; ranked by on-time and quality");
+            components.put("on_time_pct", supplier.onTimePct());
+            components.put("quality_rating", supplier.qualityRating());
+            components.put("reference_source", "catalogue standard price");
+            result.add(new PreferredSupplier(
+                    rank++,
+                    supplier.supplierId(),
+                    score,
+                    components,
+                    item.standardPrice(),
+                    "catalogue standard price",
+                    false,
+                    0,
+                    "no_history"
+            ));
+        }
+        return result;
+    }
+
     public List<String> suggestions(ItemInfo item, LocalDate asOfDate, int count, PolicySnapshot policy, ParameterResolver resolver) {
         if (item == null || count <= 0) {
             return List.of();
