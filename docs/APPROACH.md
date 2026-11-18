@@ -6,6 +6,7 @@
 **Scope:** Cantill.ai Full-stack Intern Task — Round 1
 **Policy baseline:** CORVO-PROC-POL-04 v5.0, effective 1 April 2026
 **Document purpose:** This is the implementation blueprint for the app, the decision engine, the policy-as-data model, the Spring Boot + Python architecture, the test plan, and the blind-test runbook. It also records the ambiguous cases that must be written into `DECISIONS.md`.
+**Status:** Implemented, hosted, and verified on 18 November 2026. Sections 1-21 preserve the locked design; Section 22 records as-built deviations and Section 23 records the final verification evidence.
 
 ---
 
@@ -137,13 +138,13 @@ Key consequences:
 
 | Layer | Technology |
 |---|---|
-| Frontend | React / Next.js |
-| Core API and engine | Spring Boot 3.x, Java 21 |
+| Frontend | React 18 + Vite (the brief also allows Next.js) |
+| Core API and engine | Spring Boot 3.3.5, Java 17 |
 | AI and document service | Python 3.12+, FastAPI |
-| Database | PostgreSQL |
+| Database | PostgreSQL 16; H2 for local dev |
 | Migrations | Flyway |
 | Local orchestration | Docker Compose |
-| Hosting | Render or Railway (three services + Postgres) |
+| Hosting | Render (three services + PostgreSQL), live |
 
 ### 4.2 Responsibility split
 
@@ -153,19 +154,19 @@ Key consequences:
 | REST API, auth, sessions, audit | Yes | Internal service only |
 | CSV ingestion and export | Yes | No |
 | Batch processing | Yes, fully independent | Not in the hot path |
-| Item resolution | Deterministic normalization, alias lexicon, fuzzy score | Advisory candidate lists in chat only |
+| Item resolution | Deterministic normalization, alias lexicon, fuzzy score | Not used by chat in this build |
 | Clubbing, valuation, contracts, ceiling | Yes | No |
 | Decision rules and policy evaluation | Yes | No |
 | Preferred supplier ranking | Yes | No |
 | PO consolidation | Yes | No |
 | Policy versioning, diff, approval, activation | Yes | PDF/text extraction and plain-language summary |
 | Contract register and PDF ingestion | Yes (validate and persist) | PDF text/table extraction |
-| Chat orchestration | Session, auth, audit, proxy | LLM slot filling and tool calls |
+| Chat orchestration | Session, audit, deterministic slot filling (as built) | Optional LLM endpoints; not used by chat in this build |
 
 ### 4.3 Runtime flow
 
 1. Browser calls Spring Boot. Spring Boot is the single public entry point.
-2. Spring Boot calls Python over internal REST for chat extraction, policy PDF/text/chat draft extraction, and contract PDF extraction.
+2. Spring Boot calls Python over internal REST for policy PDF and contract PDF extraction. Chat and policy-change detection run deterministically in Java in this build.
 3. Python returns structured proposals only. It never makes a final procurement decision.
 4. Spring Boot validates, persists, applies policy, computes diffs, and writes the audit trail.
 5. Batch processing and exports never call Python.
@@ -173,19 +174,19 @@ Key consequences:
 ### 4.4 Resilience and fallbacks
 
 - Batch processing works identically with Python up or down.
-- Python item ranking is advisory in chat only; it never decides a batch match.
+- Python item ranking is not used by chat in this build; it never decides a batch match.
 - Policy console supports four input modes:
   1. PDF upload through Python.
   2. Paste extracted text, with manual mapping.
-  3. Describe the change in chat, which drafts operations through Python.
+  3. Describe the change in chat, which drafts operations in Java.
   4. Manual rule and parameter editor in Spring Boot.
 - Contract console always supports manual entry in addition to PDF extraction.
-- PR chat degrades to a structured form fallback if Python is unavailable; policy chat degrades to paste/manual.
-- Python calls use timeouts, retries, and a circuit breaker. No user-facing hang.
+- PR chat is deterministic and does not depend on Python; policy PDF extraction degrades to paste/manual.
+- Python calls use a configurable 30-second timeout and one retry by default. A full circuit breaker was not implemented; no user-facing hang is possible on the batch path.
 
 ### 4.5 Repository layout
 
-- `frontend/` — Next.js app.
+- `frontend/` — React 18 + Vite app.
 - `backend/` — Spring Boot application:
   - `api` controllers, DTOs, validation
   - `domain` entities and repositories
@@ -201,9 +202,10 @@ Key consequences:
   - `match` advisory candidate ranking
   - `schemas` Pydantic models
   - `tests`
-- `deploy/` — Dockerfiles and Docker Compose.
-- `docs/` — `APPROACH.md`, `DECISIONS.md`, `API.md`.
-- `submission/` — blind-test CSV outputs.
+- `deploy/` — Dockerfiles and Render/nginx configuration.
+- `docs/` — `APPROACH.md`, `DECISIONS.md`, `API.md`, `APP_GUIDE.md`, `RUNBOOK.md`.
+- `.github/workflows/` — Render keepalive workflow.
+- `submission/` — exactly three blind-test CSV outputs.
 
 ---
 
@@ -1157,24 +1159,28 @@ Local run:
 - Seed data is idempotent: items, item aliases, suppliers, plants, PO history, contracts, policy facts (including `need_by_offset_days` and `has_active_history`), and policy v5.0 rules with `param` references.
 - Health checks for all services.
 
-Hosted:
+Hosted (as built):
 
-- Deploy to Render or Railway with three services plus managed PostgreSQL.
-- Set environment variables for database URL, AI provider key, service token, and public base URL.
-- Keep the app warm for the blind-test window; free tiers may sleep.
-- Provide the hosted link in the README.
+- Live app: `https://cantillcantill-web.onrender.com/`; AI health: `https://cantill-ai.onrender.com/health`.
+- Render hosts the frontend, Spring Boot backend, Python AI service, and PostgreSQL. The frontend image is built from `deploy/frontend.render.Dockerfile`; nginx proxies `/api` to the backend using `deploy/nginx.render.conf.template`.
+- The backend calls the AI service with `CORVO_AI_TIMEOUT_MS=30000` and `CORVO_AI_RETRIES=1` so a cold Render instance does not produce a false `503`.
+- `GET /health` on the AI service is public; policy and contract endpoints require the shared bearer token.
+- A GitHub Actions keepalive (`.github/workflows/keepalive.yml`) pings the app and AI health endpoints every 10 minutes, and the frontend pings `/api/health` every 10 minutes while a tab is open.
+- Render Free provides 750 shared instance hours per month. Three always-on services can exhaust that quota; paid instances, or a static frontend plus one always-on backend, are the production fix.
 
 README contents:
 
 - Prerequisites.
-- Environment variables.
+- Environment variables, including AI timeout and retry controls.
 - One-command run.
 - Seed and reset instructions.
-- Hosted link.
+- Hosted links and cold-start/keepalive notes.
+- Submission bundle and exact-three-CSV rule.
 - API examples.
 - Spring Boot + Python split.
 - AI tools used.
 - Manual policy amendment fallback steps.
+- Test count and final verification status.
 
 ---
 
@@ -1185,16 +1191,17 @@ Before the deadline:
 - Freeze code and verify the hosted app is live.
 - Confirm PostgreSQL is seeded and policy v5.0 is approved and active.
 - Confirm the Spring Boot and Python health endpoints.
+- Confirm `submission/` has exactly `decisions_v5.csv`, `decisions_amended.csv`, and `preferred_suppliers_top3.csv`.
 - Rehearse the full run twice.
 
 At the blind test:
 
 1. Receive the new PR batch and policy amendment.
-2. **Run 1:** process the batch under v5.0 and export the decisions CSV.
+2. **Run 1:** process the batch under v5.0 and export the decisions CSV as `submission/decisions_v5.csv`.
 3. **Amendment:** try PDF upload. If extraction fails or is slow, switch to paste-text or the manual editor. Enter the changes, validate, preview the diff, set the effective date, then approve-and-activate. Time-box to about 10 minutes.
-4. **Run 2:** reprocess the same batch and export the decisions CSV.
-5. Export the preferred supplier lists as of the given date, top 3.
-6. Push exactly three CSVs into the `submission/` folder.
+4. **Run 2:** reprocess the same batch and export the decisions CSV as `submission/decisions_amended.csv`.
+5. Export the preferred supplier lists as of the given date, top 3, as `submission/preferred_suppliers_top3.csv`.
+6. Keep exactly those three CSVs in `submission/`; remove any old run files.
 7. Do not change code.
 
 Pre-written manual amendment checklist:
@@ -1279,19 +1286,21 @@ Record each of these with "what I noticed, what I decided, why":
 
 ## 18. APPROACH.md notes
 
-State:
+State (as built):
 
-- The stack: React/Next, Spring Boot, Python FastAPI, PostgreSQL, Docker Compose.
+- The stack: React 18 + Vite, Spring Boot 3.3 on Java 17, Python FastAPI, PostgreSQL 16, Docker Compose.
 - Why the deterministic engine is in Spring Boot and the AI/document layer is in Python.
-- That Batch processing never depends on Python.
+- That batch processing never depends on Python.
 - That Python returns proposals only and never makes procurement decisions.
+- That chat is deterministic Java in this build; the Python chat endpoints exist but are not on the critical path.
 - AI tools used for coding and inside the app.
 - The supplier ranking formula and weights.
 - The policy-as-data model, facts registry, version selection, and amendment workflow.
 - The no-code boundary: new rule combinations versus a genuinely new fact.
 - The manual fallback and why it exists.
-- The test strategy and the worked-example golden tests.
-- The host link and one-command run.
+- The test strategy, the worked-example golden tests, and the 41-test final suite.
+- The hosted link (`https://cantillcantill-web.onrender.com/`) and the one-command local run.
+- The three-file `submission/` bundle and the keepalive/free-tier operational caveat.
 
 ---
 
@@ -1370,33 +1379,36 @@ Day 3:
 
 ## 21. Final acceptance checklist
 
-- [ ] `docker compose up` runs the full stack with seeded data.
-- [ ] Policy v5.0 is active and stored as data, with rule rows, scoped parameters, and the `policy_facts` registry seeded.
-- [ ] Every v5.0 rule condition that uses a policy limit references it through `param`, and `set_parameter` changes decisions without editing a rule.
-- [ ] The parameter resolver receives `RequirementFacts` and applies the full specificity order; P5 resolves the Safety & PPE value.
-- [ ] Rule scope is normalized into `condition_json`; the evaluator has no separate scope path, and P3 stores the CHK1 leaf.
-- [ ] `need_by_offset_days` is seeded with the `need_by_date_minus_requirement_date` resolver.
-- [ ] Sample CSV processes to 186 output rows: 184 decided rows and 2 `NOT_PROCESSED` rows, exactly PR-26-00172 (zero quantity) and PR-26-00173 (PUN2).
-- [ ] All 14 worked examples match route, supplier, exact price, value, consolidation grouping, and the full-batch PO IDs in §14.1. If you choose a different ID scheme, assert grouping and ID uniqueness instead; the PDF's PO IDs are one lower because PR-26-00174/175 sort first.
-- [ ] Preferred supplier lists match the three worked examples using the documented ranking formula.
-- [ ] Category top-up matches ITM-1006, ITM-1034, and ITM-1071 using the combined delivery+quality score.
-- [ ] Edge assertions pass: ITM-1017 clubbed value ₹5,65,000.92; ITM-1049 `CONTRACT_PO` at ₹191.31; ITM-1039 value ₹2,31,497.60; ITM-1014 value ₹2,01,446.40.
-- [ ] CSV has exactly 13 columns and correct empty strings.
-- [ ] Repeat runs are byte-identical.
-- [ ] Batch run with Python stopped is byte-identical.
-- [ ] Policy amendment can be uploaded, pasted, described in chat, diffed, approved, and activated.
-- [ ] Chat policy change requires explicit confirmation and never auto-approves.
-- [ ] Manual policy editor completes the same amendment without Python with the same diff and version hash.
-- [ ] Policy drafts reject unknown facts, unknown parameters, leaves with both `value` and `param`, invalid routes, duplicate priorities, missing effective dates, and Blocked-supplier outcomes.
-- [ ] Policy selection handles `SCHEDULED`, same-effective-date tie-break, and no-version fallback.
-- [ ] §14.6 policy amendment fixtures pass, including the Python-down manual path.
-- [ ] Reprocessing after an amendment changes only eligible requirement dates.
-- [ ] Buyer can approve and override with a comment; audit records both.
-- [ ] Contracts register and PDF-only contracts are loaded.
-- [ ] Hosted link is live.
-- [ ] README, APPROACH.md, and DECISIONS.md are complete.
-- [ ] No hard-coded PR numbers or item answers.
-- [ ] Blind-test submission folder and runbook are ready.
+Status: checked items were verified on 18 November 2026 by the 41-test suite, the hosted sample run, or both. The
+timed blind test itself is executed with the new batch.
+
+- [x] `docker compose up` runs the full stack with seeded data.
+- [x] Policy v5.0 is active and stored as data, with rule rows, scoped parameters, and the `policy_facts` registry seeded.
+- [x] Every v5.0 rule condition that uses a policy limit references it through `param`, and `set_parameter` changes decisions without editing a rule.
+- [x] The parameter resolver receives `RequirementFacts` and applies the full specificity order; P5 resolves the Safety & PPE value.
+- [x] Rule scope is normalized into `condition_json`; the evaluator has no separate scope path, and P3 stores the CHK1 leaf.
+- [x] `need_by_offset_days` is seeded with the `need_by_date_minus_requirement_date` resolver.
+- [x] Sample CSV processes to 186 output rows: 184 decided rows and 2 `NOT_PROCESSED` rows, exactly PR-26-00172 (zero quantity) and PR-26-00173 (PUN2).
+- [x] All 14 worked examples match route, supplier, exact price, value, consolidation grouping, and the full-batch PO IDs in §14.1. If you choose a different ID scheme, assert grouping and ID uniqueness instead; the PDF's PO IDs are one lower because PR-26-00174/175 sort first.
+- [x] Preferred supplier lists match the three worked examples using the documented ranking formula.
+- [x] Category top-up matches ITM-1006, ITM-1034, and ITM-1071 using the combined delivery+quality score.
+- [x] Edge assertions pass: ITM-1017 clubbed value ₹5,65,000.92; ITM-1049 `CONTRACT_PO` at ₹191.31; ITM-1039 value ₹2,31,497.60; ITM-1014 value ₹2,01,446.40.
+- [x] CSV has exactly 13 columns and correct empty strings.
+- [x] Repeat runs are byte-identical.
+- [x] Batch run with Python stopped is byte-identical.
+- [x] Policy amendment can be uploaded, pasted, described in chat, diffed, approved, and activated.
+- [x] Chat policy change requires explicit confirmation and never auto-approves.
+- [x] Manual policy editor completes the same amendment without Python with the same diff and version hash.
+- [x] Policy drafts reject unknown facts, unknown parameters, leaves with both `value` and `param`, invalid routes, duplicate priorities, missing effective dates, and Blocked-supplier outcomes.
+- [x] Policy selection handles `SCHEDULED`, same-effective-date tie-break, and no-version fallback.
+- [x] §14.6 policy amendment fixtures pass, including the Python-down manual path.
+- [x] Reprocessing after an amendment changes only eligible requirement dates.
+- [x] Buyer can approve and override with a comment; audit records both.
+- [x] Contracts register and PDF-only contracts are loaded.
+- [x] Hosted link is live.
+- [x] README, APPROACH.md, and DECISIONS.md are complete.
+- [x] No hard-coded PR numbers or item answers.
+- [x] Blind-test submission folder and runbook are ready.
 
 ---
 
@@ -1409,8 +1421,30 @@ behaviour.
   in the original plan. The Python AI service exists and is wired, but it is not used for chat. This keeps the
   blind-test critical path independent of LLM availability. The functional requirements are met: slot filling, item
   resolution, policy-change detection, and no auto-approve.
-- **AI resilience.** The AI client has configurable timeouts and retries. A full circuit breaker (for example
-  Resilience4j) was not implemented; the batch decision path is fully independent of the AI service and is unaffected
-  by AI unavailability.
+- **AI resilience.** The AI client uses `CORVO_AI_TIMEOUT_MS` (default 30000) and `CORVO_AI_RETRIES` (default 1). A
+  full circuit breaker (for example Resilience4j) was not implemented; the batch decision path is fully independent
+  of the AI service and is unaffected by AI unavailability.
 - **Runtime stack.** The backend runs Spring Boot 3.3 on Java 17, and the frontend uses React 18 with Vite. Both fit
   the brief's "Spring Boot 3.x" and "React/Next.js (or similar)" allowances.
+- **Hosted deployment.** The app is live on Render at `https://cantillcantill-web.onrender.com/`; the AI health
+  endpoint is `https://cantill-ai.onrender.com/health`. The frontend proxies `/api` to the backend. A GitHub Actions
+  keepalive and a frontend heartbeat reduce cold starts. Render Free's 750 shared instance hours are the operational
+  limit for three always-on services.
+- **Submission bundle.** `submission/` contains exactly `decisions_v5.csv`, `decisions_amended.csv`, and
+  `preferred_suppliers_top3.csv`.
+
+---
+
+## 23. Final verification record (18 November 2026)
+
+- Hosted app and AI health endpoint returned `200`; the backend returned `200` after a cold start.
+- Live sample run: 186 lines, 149 requirements, 149 decisions, 82 POs, and exactly two `NOT_PROCESSED` lines
+  (`PR-26-00172` invalid quantity, `PR-26-00173` unknown plant).
+- Export had exactly 13 columns; repeat processing returned the stored `runId=1` result.
+- All 14 worked examples and all three preferred-supplier examples passed in the 41-test backend suite.
+- Policy PDF upload and contract PDF extraction worked against the hosted AI service; policy activation remains
+  available through the manual editor when extraction is unavailable or slow.
+- The batch path never calls Python; AI-only endpoints return `503` when the AI service is unavailable, and the
+  manual policy editor remains the fallback.
+- Known gaps are unchanged: no authentication or role enforcement, deterministic Java chat, and AI policy
+  extraction limited to parameter-level changes. The manual editor covers arbitrary supported rule changes.

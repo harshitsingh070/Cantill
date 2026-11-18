@@ -5,11 +5,14 @@ checklist in `APPROACH.md`. Each entry states what the source material showed, w
 and why. The engine is deterministic: the same batch, policy snapshot, and seed data always produce the same
 decisions and byte-identical CSV output.
 
+**Submission status (18 November 2026):** hosted and verified; 41/41 backend tests pass; `submission/` has exactly
+three CSVs. Batch processing and policy activation work with the Python AI service stopped.
+
 ## Scope and stack
 
 - The deterministic decision engine lives in Spring Boot because it owns the system of record, policy versions,
-  audit trail, and exports. The Python FastAPI service only proposes extractions and chat slots; it never decides
-  a route, supplier, price, or approval.
+  audit trail, and exports. The Python FastAPI service proposes extractions and exposes optional chat endpoints;
+  it never decides a route, supplier, price, or approval. Chat itself runs deterministically in Java in this build.
 - Batch processing has no runtime dependency on Python. If the AI service is down, `/api/process-batch` and exports
   continue to work. Only PDF extraction and the optional AI-assist endpoints return `503`.
 - The frontend is a React 18 + Vite single-page app (the brief allows React/Next). It is served by nginx in Docker.
@@ -57,10 +60,11 @@ Decision: `NOT_PROCESSED` with a manual-review reason when the line UOM is incom
 would create financially wrong POs.
 
 **8. Missing need-by date.**
-Noticed: need-by drives urgency and consolidation. Decision: the line is held for chat clarification/processing
-when a buyer chats; in a CSV batch a missing need-by is treated as a normal (non-emergency) requirement and the
-reason notes the absence. It is not a hard `NOT_PROCESSED` because many valid PRs omit it. Why: blocking the whole
-batch on an optional field would lose legitimate demand; chat can fill the slot interactively.
+Noticed: need-by drives urgency and consolidation. Decision: a line without a need-by date is `NOT_PROCESSED`,
+retained in the batch result and CSV with the reason `missing need-by date`; chat asks the buyer for the date before
+building a decision. Why: the rule cannot calculate need-by offset or consistency without the date, and silently
+treating it as normal would hide an incomplete requirement from the buyer. Dropping the row from the export would
+make the omission invisible, so it remains visible as an exception.
 
 **9. New item with no estimate.**
 Decision: requirement value is `NULL`, route is `NEW_ITEM_SOURCING`, `group_value_inr` is blank in the export, and
@@ -164,10 +168,11 @@ is an actionable supplier; padding would violate the eligibility rules.
 
 **30. Consolidation and PO IDs.**
 Decision: consolidate requirements for the same supplier/plant/route when the difference between requirement
-datetimes is at most 24 hours (inclusive). PO IDs are deterministic sequential `PO-0001`, `PO-0002`, … in
-processing order; the PDF IDs are illustrative. Why: PR-26-00174/175 sort before the example 5 requirement, so a
-sequential full-batch scheme shifts the illustrative IDs; the implementation stays internally consistent and
-documents this.
+datetimes is at most `consolidation_hours` from the requirement's effective policy (baseline 24, inclusive). PO
+candidate IDs are deterministic sequential `PO-0001`, `PO-0002`, … in processing order; the PDF IDs are
+illustrative. The candidate becomes a persisted PO on first approval; if the candidate ID already exists from another
+run, the stored PO gets a run suffix. Why: PR-26-00174/175 sort before the example 5 requirement, so a sequential
+full-batch scheme shifts the illustrative IDs; the implementation stays internally consistent and documents this.
 
 ## Decisions, export, and edge cases
 
@@ -306,13 +311,50 @@ path prevents scope/double-application bugs.
 Decision: seed `need_by_offset_days` as `need_by_date − requirement_date`; compute `has_active_history` from the
 version's `active_history_days`. Why: derived facts stay consistent with parameter changes.
 
+## Buyer approval semantics
+
+Noticed: the brief describes approval as the action that creates the PO or sourcing event, while the export is
+generated from the persisted batch result and must remain deterministic. Decision: a batch stores each decision as
+`PROPOSED` with the candidate `po_id`, and creates sourcing events for sourcing routes, but does not create `pos` or
+`po_lines` rows. The first approval of a PO decision creates the PO and all of its `po_lines`; later approvals update
+the same PO. A PO becomes `APPROVED` only when all decisions on that PO are approved; otherwise it is
+`PARTIALLY_APPROVED`. An override to a PO route creates the PO immediately because the override is itself the buyer's
+approval action. An approved sourcing decision moves its event to `APPROVED`, and a separate send action records
+`SENT` with the sender and timestamp. Why: this matches the stated state machine while keeping the golden
+13-column export and repeat-run determinism unchanged.
+
+Noticed: an override may change the supplier or route. Decision: overrides require a written comment, preserve the
+original decision snapshot in `original_decision_json`, and write before/after audit rows. Why: the brief requires
+the original decision and approver identity to remain inspectable.
+
+## Final verification and submission
+
+Verified on 18 November 2026 against the hosted app and the 41-test backend suite:
+
+- Hosted app: `https://cantillcantill-web.onrender.com/`; AI health: `https://cantill-ai.onrender.com/health`.
+- Live sample run: 186 lines, 149 requirements, 149 decisions, 82 POs, exactly two `NOT_PROCESSED` lines
+  (`PR-26-00172` invalid quantity, `PR-26-00173` unknown plant), and a 13-column export.
+- Repeat processing returned the stored `runId=1` result; contract consumption is recomputed from the immutable
+  baseline, not from prior runs.
+- All 14 worked examples and all three preferred-supplier examples passed, along with policy amendment, chat,
+  approval, sourcing, workspace, and regression tests.
+- Policy PDF upload and contract PDF extraction worked against the hosted AI service.
+- `submission/` contains exactly `decisions_v5.csv`, `decisions_amended.csv`, and `preferred_suppliers_top3.csv`.
+
 ## Known limitations and interpretations
 
 - No authentication or role enforcement is implemented. The API trusts the `requester`/`department`/`actor` fields
-  and the UI labels actions by role. For a production deployment this would need SSO and server-side authorization.
-- Hosted deployment is documented but not provisioned in this environment; no credentials were available. Docker
-  Compose is the verified one-command path.
+  and the UI labels actions by role. The approve and activate endpoints accept an actor parameter and record it in the
+  audit trail. A production deployment would add Spring Security with role-based access control.
+- Policy v5.0 intentionally seeds only global parameters. Scoped parameters are introduced through policy amendments,
+  exactly as the policy-as-data model requires; their absence from the seed is not a missing feature.
+- The hosted Render deployment is live at `https://cantillcantill-web.onrender.com/`; the frontend proxies API calls to
+  the Spring Boot backend and PostgreSQL. AI calls use a 30-second timeout and one retry to absorb Render cold starts.
+  A GitHub Actions keepalive and a frontend heartbeat reduce sleep; Render Free's 750 shared instance hours are the
+  operational limit for three always-on services.
 - The Python service uses deterministic regex parsers, not an external LLM. It returns proposals, handles the
   provided PDFs, and can be swapped for an LLM behind the same endpoints. Policy PDF extraction can be messy; the
   API returns warnings and the UI routes the buyer to paste/manual fallback.
+- Chat is a deterministic Java slot-filler. The Python `/chat/parse` endpoint exists for parity but is not used by the
+  buyer workspace, so chat has no LLM or network dependency.
 - `contract_consumption_runs` is intentionally audit-only; see item 19. Do not use it as the next baseline.

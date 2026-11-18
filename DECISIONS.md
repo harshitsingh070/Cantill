@@ -5,11 +5,14 @@ checklist in `APPROACH.md`. Each entry states what the source material showed, w
 and why. The engine is deterministic: the same batch, policy snapshot, and seed data always produce the same
 decisions and byte-identical CSV output.
 
+**Submission status (18 November 2026):** hosted and verified; 41/41 backend tests pass; `submission/` has exactly
+three CSVs. Batch processing and policy activation work with the Python AI service stopped.
+
 ## Scope and stack
 
 - The deterministic decision engine lives in Spring Boot because it owns the system of record, policy versions,
-  audit trail, and exports. The Python FastAPI service only proposes extractions and chat slots; it never decides
-  a route, supplier, price, or approval.
+  audit trail, and exports. The Python FastAPI service proposes extractions and exposes optional chat endpoints;
+  it never decides a route, supplier, price, or approval. Chat itself runs deterministically in Java in this build.
 - Batch processing has no runtime dependency on Python. If the AI service is down, `/api/process-batch` and exports
   continue to work. Only PDF extraction and the optional AI-assist endpoints return `503`.
 - The frontend is a React 18 + Vite single-page app (the brief allows React/Next). It is served by nginx in Docker.
@@ -324,6 +327,20 @@ Noticed: an override may change the supplier or route. Decision: overrides requi
 original decision snapshot in `original_decision_json`, and write before/after audit rows. Why: the brief requires
 the original decision and approver identity to remain inspectable.
 
+## Final verification and submission
+
+Verified on 18 November 2026 against the hosted app and the 41-test backend suite:
+
+- Hosted app: `https://cantillcantill-web.onrender.com/`; AI health: `https://cantill-ai.onrender.com/health`.
+- Live sample run: 186 lines, 149 requirements, 149 decisions, 82 POs, exactly two `NOT_PROCESSED` lines
+  (`PR-26-00172` invalid quantity, `PR-26-00173` unknown plant), and a 13-column export.
+- Repeat processing returned the stored `runId=1` result; contract consumption is recomputed from the immutable
+  baseline, not from prior runs.
+- All 14 worked examples and all three preferred-supplier examples passed, along with policy amendment, chat,
+  approval, sourcing, workspace, and regression tests.
+- Policy PDF upload and contract PDF extraction worked against the hosted AI service.
+- `submission/` contains exactly `decisions_v5.csv`, `decisions_amended.csv`, and `preferred_suppliers_top3.csv`.
+
 ## Known limitations and interpretations
 
 - No authentication or role enforcement is implemented. The API trusts the `requester`/`department`/`actor` fields
@@ -332,10 +349,12 @@ the original decision and approver identity to remain inspectable.
 - Policy v5.0 intentionally seeds only global parameters. Scoped parameters are introduced through policy amendments,
   exactly as the policy-as-data model requires; their absence from the seed is not a missing feature.
 - The hosted Render deployment is live at `https://cantillcantill-web.onrender.com/`; the frontend proxies API calls to
-  the Spring Boot backend and PostgreSQL. Free Render instances cold-start after inactivity, so the first request can
-  be slow. AI-assisted policy/contract extraction depends on the Python service and its shared token; the manual policy
-  editor remains the fallback if AI is unavailable.
+  the Spring Boot backend and PostgreSQL. AI calls use a 30-second timeout and one retry to absorb Render cold starts.
+  A GitHub Actions keepalive and a frontend heartbeat reduce sleep; Render Free's 750 shared instance hours are the
+  operational limit for three always-on services.
 - The Python service uses deterministic regex parsers, not an external LLM. It returns proposals, handles the
   provided PDFs, and can be swapped for an LLM behind the same endpoints. Policy PDF extraction can be messy; the
   API returns warnings and the UI routes the buyer to paste/manual fallback.
+- Chat is a deterministic Java slot-filler. The Python `/chat/parse` endpoint exists for parity but is not used by the
+  buyer workspace, so chat has no LLM or network dependency.
 - `contract_consumption_runs` is intentionally audit-only; see item 19. Do not use it as the next baseline.

@@ -2,7 +2,11 @@
 
 Deterministic PR-to-PO decisioning with a policy-as-data console, buyer chat, contract extraction, preferred
 supplier ranking, buyer approvals, audit trail, and CSV exports. The Spring Boot engine owns every decision; the Python service
-only proposes extractions and chat slots.
+only proposes document extractions, and chat runs deterministically in Java.
+
+**Submission status (18 Nov 2026):** hosted and verified; 41/41 backend tests pass; `submission/` contains exactly
+the three required CSVs. Batch processing and policy activation remain fully functional with the Python AI service
+stopped.
 
 ## Stack
 
@@ -73,6 +77,8 @@ Vite proxies `/api` to `http://localhost:8080`.
 | `SPRING_DATASOURCE_DRIVER_CLASS_NAME` | `org.h2.Driver` | `org.postgresql.Driver` in Compose |
 | `CORVO_AI_BASE_URL` | `http://localhost:8000` | Python service base URL |
 | `CORVO_AI_TOKEN` | `local-dev-token` | Shared bearer token for Python calls |
+| `CORVO_AI_TIMEOUT_MS` | `30000` | Python call timeout; 30s covers Render cold starts |
+| `CORVO_AI_RETRIES` | `1` | Retries after a timeout or connection failure |
 | `CORVO_SEED_ENABLED` | `true` | Idempotent seed toggle |
 | `PORT` | `8080` | Spring Boot port |
 
@@ -80,12 +86,28 @@ Vite proxies `/api` to `http://localhost:8080`.
 
 Live demo hosted on Render (frontend, Spring Boot backend, Python AI service, and PostgreSQL):
 
-```
-Hosted app: https://cantillcantill-web.onrender.com/
-```
+- **App:** https://cantillcantill-web.onrender.com/
+- **AI health:** https://cantill-ai.onrender.com/health
 
 The frontend proxies relative `/api` calls to the backend through `deploy/nginx.render.conf.template`. Free Render
-web services may cold-start after inactivity; the first request can take longer while the instance wakes.
+web services sleep after inactivity. A GitHub Actions keepalive (`.github/workflows/keepalive.yml`) pings the app
+and AI health endpoints every 10 minutes; while a browser tab is open, the frontend also pings `/api/health` every
+10 minutes. The first request after a long idle period can still be slow. Render's free tier provides 750 shared
+instance hours per month, so three always-on services can exhaust the quota; paid instances or a static frontend
+are the production fix.
+
+## Submission bundle
+
+`submission/` contains exactly the three required CSVs from the verified sample run:
+
+| File | Contents |
+| --- | --- |
+| `decisions_v5.csv` | Run 1 decisions under policy v5.0 |
+| `decisions_amended.csv` | Run 2 decisions after the policy amendment |
+| `preferred_suppliers_top3.csv` | Preferred suppliers, top three per item |
+
+During the blind test, replace these files with the new run outputs and keep exactly these three names. Do not add
+extra files to `submission/`.
 
 ## Seed data and determinism
 
@@ -165,7 +187,8 @@ curl -X POST http://localhost:8080/api/chat/messages \
   evaluation, preferred lists, PO grouping, audit log, CSV export, and all state transitions.
 - Python FastAPI: `POST /policy/describe`, `/policy/extract`, `/policy/upload`, `/contract/extract`,
   `/chat/parse`. It returns proposals only. The deterministic Python parsers handle the provided policy and
-  contract PDFs; the endpoints can be backed by an LLM without changing the Java contract.
+  contract PDFs; the endpoints can be backed by an LLM without changing the Java contract. The buyer workspace
+  uses the Java chat endpoint; `/chat/parse` exists for parity and is not on the critical path.
 - Batch processing never calls Python. AI failures surface as `503` on AI-only endpoints.
 
 ## Manual policy amendment fallback
@@ -186,33 +209,38 @@ cd backend
 mvn test
 ```
 
-Coverage includes the 14 golden worked examples, all three preferred-supplier lists, policy amendments (including
-the Python-down manual path and same-date tie-break), chat flow, deterministic repeat runs, buyer approval/PO
-promotion, sourcing send, and workspace projections. Tests are transactional and roll back so golden fixtures are
-not contaminated.
+The final suite is 41 tests and passes. Coverage includes the 14 golden worked examples, all three
+preferred-supplier lists, policy amendments (including the Python-down manual path and same-date tie-break), chat
+flow, deterministic repeat runs, buyer approval/PO promotion, sourcing send, workspace projections, and regression
+tests for policy wording such as "becomes". Tests are transactional and roll back so golden fixtures are not
+contaminated.
 
 ## Repository layout
 
 ```
+.github/        Keepalive workflow for Render
 backend/        Spring Boot API and deterministic engine
 ai-service/     FastAPI extraction and chat proposer
 frontend/       React/Vite buyer workspace
 deploy/         Dockerfiles and nginx config
-docs/           API reference and blind-test runbook
+docs/           API reference, application guide, and blind-test runbook
+submission/     Exactly three final CSVs
 docker-compose.yml
-DECISIONS.md    Section 17 checklist and deviations
-APPROACH.md     Original implementation blueprint
+DECISIONS.md    Section 17 checklist, deviations, and final verification
+APPROACH.md     Implementation approach and as-built notes (mirrors docs/APPROACH.md)
 ```
 
 ## Blind test
 
 Use `docs/RUNBOOK.md`. It covers Run 1, the PDF/paste/manual amendment path, Run 2, preferred-supplier
 export, and the exact-three-CSV final check. The stack must not need Python for batch processing or policy
-activation.
+activation. The repository's `submission/` already has the three verified sample outputs; replace them with the
+new batch outputs during the blind test.
 
 ## AI tools used
 
-- OpenAI Codex/opencode-style coding agents were used to scaffold, implement, and test the stack.
+- AI coding assistants: OpenCode CLI (DeepSeek V4.1 Flash Free) and OpenAI Codex. They were used for scaffolding,
+  implementation, tests, documentation, and deployment verification.
 - Inside the app, the Python layer is deterministic today. It is deliberately swappable for an LLM provider for
   policy/contract extraction and chat parsing; no API key is required to run this submission.
 
