@@ -65,6 +65,14 @@ function Stat({ label, value, tone }) {
 
 function App() {
   const [tab, setTab] = useState('workspace')
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      fetch('/api/health', { cache: 'no-store' }).catch(() => {})
+    }, 10 * 60 * 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
   return (
     <div className="app">
       <aside className="sidebar">

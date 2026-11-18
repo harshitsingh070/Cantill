@@ -83,7 +83,7 @@ public class AiClient {
             }
         }
         throw new AiUnavailableException("AI service is unavailable at " + baseUrl
-                + "; use paste-text or the manual policy editor", last);
+                + "; use the manual policy editor or try again after the AI service wakes", last);
     }
 
     private HttpHeaders headers(MediaType contentType) {

@@ -52,6 +52,17 @@ class ChatFlowTest {
     }
 
     @Test
+    void policyChangeAcceptsBecomesWording() {
+        Map<String, Object> first = send(null, "from 1 Dec, spot limit becomes 1 lakh", "Asha", "Procurement");
+        assertThat(String.valueOf(first.get("reply")))
+                .contains("2026-12-01")
+                .contains("spot_limit")
+                .contains("100000");
+        assertThat(first.get("intent")).isEqualTo("POLICY");
+        assertThat(amendmentRepository.count()).isZero();
+    }
+
+    @Test
     void chatCollectsPrSlotsAndSubmits() {
         Map<String, Object> first = send(null, "20 safety goggles at PUN1 by 25 Nov", "Asha", "Maintenance");
         assertThat(first.get("intent")).isEqualTo("PR");

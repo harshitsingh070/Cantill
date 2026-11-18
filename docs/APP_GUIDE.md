@@ -751,7 +751,7 @@ pr_no,pr_line,created_at,requester,department,plant,item_code,description,quanti
 - Chat policy changes always require explicit confirmation and never auto-approve.
 - PDF-only contracts are supported through upload and extraction, with manual entry as the fallback.
 - The application does not depend on Python for batch processing, policy activation, or CSV export.
-- The hosted link is live only while the Docker stack and tunnel are running. A persistent host is required for the final submission.
+- The hosted Render deployment is live at `https://cantillcantill-web.onrender.com/`. Free instances cold-start after inactivity; the first request can be slow. AI-assisted extraction depends on the Python service; the manual policy editor remains the fallback.
 - Run keys make repeated processing of the same batch and active policy return the same run.
 - Contract consumption is recomputed from the seeded baseline; repeated runs do not compound consumption.
 

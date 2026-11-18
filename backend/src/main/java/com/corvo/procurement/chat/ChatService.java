@@ -764,13 +764,13 @@ public class ChatService {
 
     private BigDecimal detectPolicyValue(String lower) {
         Matcher matcher = Pattern.compile(
-                "(?i)(?:limit|boundary|window|consolidation|hours|days)\\s*(?:is|to|at|of|=|:)?\\s*(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(lakhs?|lac|crore|cr|k)?")
+                "(?i)(?:limit|boundary|window|consolidation|hours|days)\\s*(?:is|to|at|of|=|:|becomes?|changes?\\s+to|be\\s+set\\s+to|set\\s+to|revised\\s+to|increased?\\s+to|decreased?\\s+to|raised?\\s+to|lowered?\\s+to|reduced?\\s+to)?\\s*(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(lakhs?|lac|crore|cr|k)?")
                 .matcher(lower);
         if (matcher.find()) {
             return scaleValue(matcher.group(1), matcher.group(2));
         }
         Matcher change = Pattern.compile(
-                "(?i)(?:should\\s+be|be|is|to|at|of|=|:)\\s*(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(lakhs?|lac|crore|cr|k)?")
+                "(?i)(?:should\\s+be|becomes?|changes?\\s+to|be\\s+set\\s+to|set\\s+to|revised\\s+to|increased?\\s+to|decreased?\\s+to|raised?\\s+to|lowered?\\s+to|reduced?\\s+to|be|is|to|at|of|=|:)\\s*(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(lakhs?|lac|crore|cr|k)?")
                 .matcher(lower);
         if (change.find()) {
             return scaleValue(change.group(1), change.group(2));

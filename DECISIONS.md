@@ -331,8 +331,10 @@ the original decision and approver identity to remain inspectable.
   audit trail. A production deployment would add Spring Security with role-based access control.
 - Policy v5.0 intentionally seeds only global parameters. Scoped parameters are introduced through policy amendments,
   exactly as the policy-as-data model requires; their absence from the seed is not a missing feature.
-- Hosted deployment is documented but not provisioned in this environment; no credentials were available. Docker
-  Compose is the verified one-command path.
+- The hosted Render deployment is live at `https://cantillcantill-web.onrender.com/`; the frontend proxies API calls to
+  the Spring Boot backend and PostgreSQL. Free Render instances cold-start after inactivity, so the first request can
+  be slow. AI-assisted policy/contract extraction depends on the Python service and its shared token; the manual policy
+  editor remains the fallback if AI is unavailable.
 - The Python service uses deterministic regex parsers, not an external LLM. It returns proposals, handles the
   provided PDFs, and can be swapped for an LLM behind the same endpoints. Policy PDF extraction can be messy; the
   API returns warnings and the UI routes the buyer to paste/manual fallback.

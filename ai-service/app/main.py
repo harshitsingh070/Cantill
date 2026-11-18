@@ -133,7 +133,13 @@ def detect_policy_parameter(lower: str) -> Optional[str]:
 
 def detect_value(lower: str) -> Optional[float]:
     match = re.search(
-        r"(?i)(?:limit|boundary|window|consolidation|hours|days)\s*(?:is|to|at|of|=|:)?\s*(?:₹|rs\.?|inr)?\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*(lakh|lac|crore|k)?",
+        r"(?i)(?:limit|boundary|window|consolidation|hours|days)\s*(?:is|to|at|of|=|:|becomes?|changes?\s+to|be\s+set\s+to|set\s+to|revised\s+to|increased?\s+to|decreased?\s+to|raised?\s+to|lowered?\s+to|reduced?\s+to)?\s*(?:₹|rs\.?|inr)?\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*(lakh|lac|crore|k)?",
+        lower,
+    )
+    if match:
+        return scale_value(match.group(1), match.group(2))
+    match = re.search(
+        r"(?i)(?:should\s+be|becomes?|changes?\s+to|be\s+set\s+to|set\s+to|revised\s+to|increased?\s+to|decreased?\s+to|raised?\s+to|lowered?\s+to|reduced?\s+to|be|is|to|at|of|=|:)\s*(?:₹|rs\.?|inr)?\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*(lakh|lac|crore|k)?",
         lower,
     )
     if match:

@@ -55,3 +55,7 @@ Desktop.ini
 *.temp
 *.bak
 *.cache
+
+# Internal notes not part of the submission
+roadmap.md
+docs/CODEBASE_REPORT.md
