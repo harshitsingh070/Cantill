@@ -339,7 +339,29 @@ Verified on 18 November 2026 against the hosted app and the 41-test backend suit
 - All 14 worked examples and all three preferred-supplier examples passed, along with policy amendment, chat,
   approval, sourcing, workspace, and regression tests.
 - Policy PDF upload and contract PDF extraction worked against the hosted AI service.
-- `submission/` contains exactly `decisions_v5.csv`, `decisions_amended.csv`, and `preferred_suppliers_top3.csv`.
+- The prior sample submission contained `decisions_v5.csv`, `decisions_amended.csv`, and
+  `preferred_suppliers_top3.csv`.
+
+## Blind test addendum (20 November 2026)
+
+- Run 1 was processed from `hidden_pr_batch.csv` under v5.0 and exported as `submission/harshit__run1.csv`:
+  190 lines, 13 columns, all decisions labelled v5.0, with the two deliberate validation exceptions
+  (`PR-26-00674` invalid quantity, `PR-26-00675` unknown plant).
+- The PDF extractor did not preserve the amendment's structure: it proposed a single emergency-limit change for
+  PUN1 Electrical Spares. The manual policy editor was therefore used through the same amendment API. This is the
+  documented fallback in item 36, not a separate policy path.
+- Amendment No. 1 was entered as: Packaging `spot_limit = 100000`; global `rfq_rfp_boundary = 800000`; and rule
+  5.2A at CHK1 for Electrical Spares at or above 50000. Because the outcome is route-dependent and an outcome has
+  one route, 5.2A is represented by two rules at priorities 35 (RFQ below the boundary) and 36 (RFP at or above
+  it). Contract PO rule 5.2 remains higher priority at 30; emergency and spot rules are lower at 40 and 50.
+- The amendment was approved as version `v5.0-A1`, effective 1 December 2026. A future-dated approval is
+  `SCHEDULED`, so requirements dated before 1 December still use v5.0.
+- Run 2 was reprocessed and exported as `submission/harshit__run2.csv`: 190 lines; 92 decisions use v5.0 and 98
+  use v5.0-A1. The amendment changes 15 spot decisions to RFQ, four RFQ decisions to RFP, and creates the
+  expected 5.2A RFQ decisions at CHK1.
+- Preferred suppliers as of 1 December 2026 were exported as `submission/harshit__preferred.csv`: 169 rows,
+  73 items, top three per item, no padding.
+- `submission/` now contains exactly the three blind-test CSVs.
 
 ## Known limitations and interpretations
 
